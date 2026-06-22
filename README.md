@@ -149,6 +149,9 @@ https://github.com/user-attachments/assets/fc04b203-32aa-46dd-899c-0fce6ca284f3
 
 
 
+<img width="3024" height="4032" alt="IMG_4395" src="https://github.com/user-attachments/assets/612358d9-3566-488f-9dfb-51be3ad9db69" />
+
+<img width="4032" height="3024" alt="IMG_4398" src="https://github.com/user-attachments/assets/09a6001f-b95a-4a94-bfa9-4ce1949f80a3" />
 
 # Design Cycle 3: ESP32 Rebuild
 Two problems pushed us past the basic Arduino setup:
