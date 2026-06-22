@@ -1,10 +1,22 @@
-# Swift Doorbell W/ ESP-32
+# Swift Doorbell W/ Arduino
 **Collaborators:** Ibrahim Al-Howaid &amp; Aidan Drakes 
 **Project Start:** February 5, 2026 
-**Status:** In Progress (Design Cycle 3)
+**Status:** Complete and Installed (Design Cycle 3)
+
+# Summary (STAR)
+**Situation.** The shop's auto-locking door meant visitors often went unnoticed when staff were busy or in the classroom, and no commercial doorbell fit the space.
+
+**Task.** Design and build a rugged, loud, wireless doorbell from scratch, with a button that could run for months on a single battery.
+
+**Action.** We prototyped on the Micro:bit, found it could not supply enough voltage, then moved to Arduino and built LED and speaker test circuits with debounce logic. When volume and installation became the limits, I rebuilt on two ESP32s with C++ firmware using ESP-NOW for router-free communication and deep sleep with an RTC-pin wake to preserve battery life. Aidan designed the 3D-printed enclosures.
+
+**Result.** A complete, installed wireless doorbell. The speaker runs on wall power in the classroom and the battery-powered button is mounted outside, so pressing it now alerts staff inside. Built and tested across three design cycles.
+
+# Overview
+A wireless doorbell built from two ESP32 microcontrollers that talk directly over ESP-NOW, designed and built from scratch with a partner. The battery-powered button is mounted outside by the door and the wall-powered speaker sits in the classroom, so a press outside plays a chime inside. The project went through three design cycles (Micro:bit, Arduino, ESP32) and is now fully built and installed.
 
 # The Problem
-The shop features a security door that locks automatically and can only be opened from the inside. This requires a person to be physically present near the door to grant entry. However, when the shop is busy or staff are in the main classroom area, visitors often go unnoticed. A reliable alert system is needed to bridge this gap.
+The shop has a door that locks automatically and can only be opened from the inside. This requires a person to be physically present near the door to grant entry. However, when the shop is busy or staff are in the main classroom area, visitors often go unnoticed. A reliable alert system is needed to bridge this gap.
 
 # Solution & Criteria
 Our goal is to build a rugged, high-volume doorbell system tailored for a shop environment. The design must meet the following technical requirements:
@@ -34,9 +46,14 @@ The Micro:bit could not drive the button and speaker, so we switched to Arduino,
 I built this prototype to confirm the button could connect to the Arduino and toggle an LED on and off, using a state machine and debounce logic so a single press registers cleanly.
 
 
-<img width="512" height="384" alt="light demo" src="https://github.com/user-attachments/assets/abaa2b7c-1631-4b26-b2d8-9929517be56a" />
+
+<img width="512" height="384" alt="light demo" src="https://github.com/user-attachments/assets/fffa8c63-f332-4a32-92e2-d1d7d545c263" />
 
 
+
+
+<details>
+<summary>View LED prototype code</summary>
 
 ```cpp
 // Pin constants
@@ -117,20 +134,18 @@ void updateHardware() {
 }
 ```
 
+</details>
+
+
 ## Speaker Prototype
 I built this prototype to test the speaker volume and functions while also connecting a button at the same time. The speaker was not playing at full volume yet, since it needs a better transistor to support the wattage.
 
 
 
 
-https://github.com/user-attachments/assets/358c88d1-b70e-46f1-bb2e-e722ba1a3a29
+https://github.com/user-attachments/assets/fc04b203-32aa-46dd-899c-0fce6ca284f3
 
-
-
-<img width="4032" height="3024" alt="Doorbell Design 2 (1)" src="https://github.com/user-attachments/assets/f0db4da2-6f94-4f41-865a-d80bd5955752" />
-
-
-
+<img width="4032" height="3024" alt="Doorbell Design 2 (1)" src="https://github.com/user-attachments/assets/82a205eb-86eb-4e3d-aacd-317fc792dec9" />
 
 
 
@@ -160,8 +175,10 @@ Components: ESP32, BC547 transistor, passive speaker, 1kΩ resistor, 10kΩ resis
 7. BC547 Collector (left leg) → Speaker (−)
 8. Speaker (+) → breadboard + rail (5V)
 
+*BC547 pin order with flat face toward you, legs down: Collector, Base, Emitter (left to right)*
+
 ## Button Side Wiring
-Components: ESP32, 3.36V LiFePO4 battery, doorbell button (3-wire), 10kΩ resistor.
+Components: ESP32, 3.36V battery, doorbell button (3-wire), 10kΩ resistor.
 
 9. Battery + (red wire) → ESP32 3V3 pin (bypasses regulator, battery voltage matches 3.3V)
 10. Battery − (black wire) → ESP32 GND pin
@@ -175,6 +192,9 @@ Components: ESP32, 3.36V LiFePO4 battery, doorbell button (3-wire), 10kΩ resist
 
 ## Speaker Tone Test Code
 Uploaded to the speaker ESP32 to confirm the BC547 circuit and speaker were wired correctly. Three tones play at increasing pitch then stop.
+
+<details>
+<summary>View tone test sketch</summary>
 
 ```cpp
 void setup() {
@@ -191,8 +211,13 @@ void loop() {
 }
 ```
 
+</details>
+
 ## Button Continuity Test Code
 Uploaded to the button ESP32 to verify GPIO33 wiring before testing deep sleep. Serial Monitor (115200 baud) prints 1 when idle and 0 when the button is pressed.
+
+<details>
+<summary>View continuity test sketch</summary>
 
 ```cpp
 void setup() {
@@ -206,8 +231,13 @@ void loop() {
 }
 ```
 
+</details>
+
 ## Button Deep Sleep Test Code
 Tests the full button-side behaviour. On wake, it prints a message to Serial and blinks the onboard LED three times, then returns to deep sleep. The ESP32 wakes on GPIO33 going LOW (button pressed).
+
+<details>
+<summary>View deep sleep test sketch</summary>
 
 ```cpp
 #define BUTTON_PIN GPIO_NUM_33
@@ -237,18 +267,16 @@ void loop() {
 }
 ```
 
-## Test Results
-- Speaker tone test: successful, three tones played clearly through the BC547 circuit.
-- Button continuity test: successful, GPIO33 reads 1 at idle and switches to 0 when the button is pressed.
-- Deep sleep wake test: successful, Serial Monitor confirmed the message on each button press and the board returns to sleep correctly.
-- Next step: implement ESP-NOW communication to link the button and speaker ESP32 boards.
-
+</details>
 
 ## Final Firmware
 With both boards wired and tested, I wrote the final firmware. The two sketches share an identical `DoorbellMessage` struct so the packet lines up on both sides, and both are organized into classes (`EspNowSender` on the button, `SpeakerController` on the speaker) to keep the logic clean and readable.
- 
+
 **Button side** (`doorbell_button.ino`): the board wakes from deep sleep on a button press, fires one ESP-NOW packet to the speaker's MAC address, then goes straight back to sleep. All the work happens once in `setup()`, so `loop()` is never reached.
- 
+
+<details>
+<summary>View the full firmware (both sketches)</summary>
+
 ```cpp
 /**
  * @file doorbell_button.ino
@@ -261,19 +289,19 @@ With both boards wired and tested, I wrote the final firmware. The two sketches 
  * is pressed, GPIO33 is pulled LOW, waking the board. On wake it fires a single
  * ESP-NOW packet to the speaker ESP32, then immediately returns to Deep Sleep.
  */
- 
+
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
- 
+
 // --- WAKE PIN ---
 // GPIO33 is an RTC pin, so it stays active during Deep Sleep and can wake the board.
 #define BUTTON_WAKE_PIN GPIO_NUM_33
- 
+
 // --- TARGET ADDRESS ---
 // CHANGE THIS to your speaker ESP32's MAC address.
 uint8_t speakerMAC[] = {0xB4, 0xE6, 0x2D, 0xD5, 0xFB, 0x75};
- 
+
 /**
  * @struct DoorbellMessage
  * @brief Tiny payload sent over ESP-NOW. Kept identical on both boards.
@@ -281,7 +309,7 @@ uint8_t speakerMAC[] = {0xB4, 0xE6, 0x2D, 0xD5, 0xFB, 0x75};
 typedef struct {
   bool ring;
 } DoorbellMessage;
- 
+
 /**
  * @class EspNowSender
  * @brief Encapsulates ESP-NOW initialization and one-shot transmission.
@@ -289,32 +317,32 @@ typedef struct {
 class EspNowSender {
   private:
     uint8_t peerMAC[6];
- 
+
   public:
     // Store the target MAC address for this sender.
     EspNowSender(uint8_t mac[6]) {
       memcpy(peerMAC, mac, 6);
     }
- 
+
     /**
      * @brief Brings up Wi-Fi in station mode and registers the speaker as a peer.
      * @return true if ESP-NOW initialized and the peer was added, false otherwise.
      */
     bool begin() {
       WiFi.mode(WIFI_STA);
- 
+
       if (esp_now_init() != ESP_OK) {
         return false;
       }
- 
+
       esp_now_peer_info_t peerInfo = {};
       memcpy(peerInfo.peer_addr, peerMAC, 6);
       peerInfo.channel = 0;      // 0 = use current channel (no router needed)
       peerInfo.encrypt = false;
- 
+
       return esp_now_add_peer(&peerInfo) == ESP_OK;
     }
- 
+
     /**
      * @brief Sends a single "ring" packet to the speaker ESP32.
      */
@@ -325,35 +353,35 @@ class EspNowSender {
       delay(100); // give the radio time to finish transmitting before sleep
     }
 };
- 
+
 // --- OBJECT INSTANTIATION ---
 EspNowSender doorbellSender(speakerMAC);
- 
+
 void setup() {
   Serial.begin(115200);
   delay(50);
- 
+
   if (doorbellSender.begin()) {
     doorbellSender.sendRing();
     Serial.println("Ring sent!");
   } else {
     Serial.println("ESP-NOW init failed");
   }
- 
+
   // Arm wake-up on button press (GPIO33 going LOW) and return to Deep Sleep.
   esp_sleep_enable_ext0_wakeup(BUTTON_WAKE_PIN, 0);
   Serial.println("Going to sleep...");
   delay(50);
   esp_deep_sleep_start();
 }
- 
+
 void loop() {
   // Never reached. All work happens once on wake in setup().
 }
 ```
- 
+
 **Speaker side** (`doorbell_speaker.ino`): the board stays on, listens for the ESP-NOW packet, and on receipt plays one of three randomized melodies through the BC547-driven speaker. The receive callback only raises a flag so it stays fast, and the actual chime plays in `loop()`.
- 
+
 ```cpp
 /**
  * @file doorbell_speaker.ino
@@ -366,27 +394,27 @@ void loop() {
  * received, it plays one of three randomized musical melodies through the speaker
  * driven by the BC547 transistor on GPIO25.
  */
- 
+
 #include "pitches.h"
 #include <esp_now.h>
 #include <WiFi.h>
- 
+
 // --- SPEAKER PIN ---
 #define SPEAKER_PIN 25
- 
+
 // --- MELODY ARRAYS ---
 int melody1[] = {NOTE_E6, NOTE_C6};
 int durations1[] = {4, 2};
 int length1 = 2;
- 
+
 int melody2[] = {NOTE_C6, NOTE_G5, NOTE_G5, NOTE_A5, NOTE_G5, 0, NOTE_B5, NOTE_C6};
 int durations2[] = {4, 8, 8, 4, 4, 4, 4, 4};
 int length2 = 8;
- 
+
 int melody3[] = {NOTE_A5, NOTE_F5, NOTE_G5, NOTE_C5, REST, REST, NOTE_C4, NOTE_G4, NOTE_A4, NOTE_F4};
 int durations3[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
 int length3 = 10;
- 
+
 /**
  * @struct DoorbellMessage
  * @brief Tiny payload received over ESP-NOW. Kept identical on both boards.
@@ -394,10 +422,10 @@ int length3 = 10;
 typedef struct {
   bool ring;
 } DoorbellMessage;
- 
+
 // Flag set by the receive callback, handled in loop() so the callback stays fast.
 volatile bool ringRequested = false;
- 
+
 /**
  * @class SpeakerController
  * @brief Manages audio output, frequencies, and melody playback.
@@ -405,19 +433,19 @@ volatile bool ringRequested = false;
 class SpeakerController {
   private:
     int pin;
- 
+
   public:
     // initialize speaker pin
     SpeakerController(int p) {
       pin = p;
     }
- 
+
     // Initializes the hardware pin and ensures transistor is off
     void begin() {
       pinMode(pin, OUTPUT);
       noTone(pin);
     }
- 
+
     /**
      * @brief Iterates through arrays to play a specific musical melody.
      * @param mel Array of note frequencies.
@@ -431,18 +459,18 @@ class SpeakerController {
         } else {
           tone(pin, mel[thisNote]);
         }
- 
+
         // Calculate note duration (1 second / note type)
         int noteDuration = 1000 / dur[thisNote];
         delay(noteDuration);
- 
+
         // Stop tone and pause briefly before the next note
         noTone(pin);
         int pauseBetweenNotes = noteDuration * 1.01;
         delay(pauseBetweenNotes);
       }
     }
- 
+
     /**
      * @brief Picks one of the three melodies at random and plays it.
      */
@@ -457,10 +485,10 @@ class SpeakerController {
       }
     }
 };
- 
+
 // --- OBJECT INSTANTIATION ---
 SpeakerController doorbellSpeaker(SPEAKER_PIN);
- 
+
 /**
  * @brief ESP-NOW receive callback. Kept short: just validates and raises a flag.
  */
@@ -471,24 +499,24 @@ void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     ringRequested = true;
   }
 }
- 
+
 void setup() {
   Serial.begin(115200);
- 
+
   doorbellSpeaker.begin();
   randomSeed(analogRead(0));
- 
+
   WiFi.mode(WIFI_STA);
- 
+
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
     return;
   }
- 
+
   esp_now_register_recv_cb(onReceive);
   Serial.println("Speaker ready, listening...");
 }
- 
+
 void loop() {
   // Play the chime outside the callback so the radio callback stays fast.
   if (ringRequested) {
@@ -498,16 +526,17 @@ void loop() {
   }
 }
 ```
- 
+
+</details>
+
+
 *Note: the melody frequencies come from `pitches.h`, the standard Arduino tone-library header that maps note names (like `NOTE_E6`) to their frequencies in Hz.*
- 
+
 ## Test Results
 - Speaker tone test: successful, three tones played clearly through the BC547 circuit.
 - Button continuity test: successful, GPIO33 reads 1 at idle and switches to 0 when the button is pressed.
 - Deep sleep wake test: successful, Serial Monitor confirmed the message on each button press and the board returns to sleep correctly.
 - ESP-NOW link: successful, the button and speaker ESP32 boards communicate reliably over ESP-NOW.
-
-
 
 ## Final Installation
 The system is built, tested, and installed in the shop. The speaker unit is set up in the classroom on wall power, and the battery-powered button unit is mounted outside by the door. Pressing the button outside plays the chime in the classroom, which solves the original problem of visitors going unnoticed at the auto-locking door.
@@ -519,12 +548,3 @@ The system is built, tested, and installed in the shop. The speaker unit is set 
 - Power management: deep sleep with RTC-pin wake
 - Electronics: BC547 transistor speaker driver, breadboard prototyping
 - Enclosure: Fusion 360, 3D printing (Aidan)
-
-# STAR Summary
-**Situation.** The shop's auto-locking door meant visitors & students often went unnoticed when staff/students were busy or in the classroom, so we decided to design and build one.
- 
-**Task.** Design and build a rugged, loud, wireless doorbell from scratch, with a button that could run for months on a single battery.
- 
-**Action.** We prototyped on the Micro:bit, found it could not supply enough voltage, then moved to Arduino and built LED and speaker test circuits with debounce logic. When volume and installation became the limits, I rebuilt on two ESP32s with C++ firmware using ESP-NOW for router-free communication and deep sleep with an RTC-pin wake to preserve battery life. Aidan designed the 3D-printed enclosures.
- 
-**Result.** A complete, installed wireless doorbell. The speaker runs on wall power in the classroom and the battery-powered button is mounted outside, so pressing it now alerts staff inside. Built and tested across three design cycles.
