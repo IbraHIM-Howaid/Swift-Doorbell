@@ -33,6 +33,11 @@ The Micro:bit could not drive the button and speaker, so we switched to Arduino,
 ## LED Prototype
 I built this prototype to confirm the button could connect to the Arduino and toggle an LED on and off, using a state machine and debounce logic so a single press registers cleanly.
 
+
+<img width="512" height="384" alt="light demo" src="https://github.com/user-attachments/assets/abaa2b7c-1631-4b26-b2d8-9929517be56a" />
+
+
+
 ```cpp
 // Pin constants
 const int buttonPin = 7;
@@ -114,6 +119,17 @@ void updateHardware() {
 
 ## Speaker Prototype
 I built this prototype to test the speaker volume and functions while also connecting a button at the same time. The speaker was not playing at full volume yet, since it needs a better transistor to support the wattage.
+
+
+
+
+https://github.com/user-attachments/assets/358c88d1-b70e-46f1-bb2e-e722ba1a3a29
+
+
+
+
+
+
 
 # Design Cycle 3: ESP32 Rebuild
 Two problems pushed us past the basic Arduino setup:
@@ -223,6 +239,9 @@ void loop() {
 - Deep sleep wake test: successful, Serial Monitor confirmed the message on each button press and the board returns to sleep correctly.
 - Next step: implement ESP-NOW communication to link the button and speaker ESP32 boards.
 
+## Final Installation
+The system is built, tested, and installed in the shop. The speaker unit is set up in the classroom on wall power, and the battery-powered button unit is mounted outside by the door. Pressing the button outside plays the chime in the classroom, which solves the original problem of visitors going unnoticed at the auto-locking door.
+
 # Tech Stack
 - Microcontrollers: ESP32 (x2), earlier prototypes on Micro:bit and Arduino
 - Wireless: ESP-NOW (peer-to-peer, router-free)
@@ -232,10 +251,10 @@ void loop() {
 - Enclosure: Fusion 360, 3D printing (Aidan)
 
 # STAR Summary
-**Situation.** The shop's auto-locking security door meant visitors often went unnoticed when staff were busy or in the classroom, and no commercial doorbell fit the space.
-
+**Situation.** The shop's auto-locking door meant visitors & students often went unnoticed when staff/students were busy or in the classroom, so we decided to design and build one.
+ 
 **Task.** Design and build a rugged, loud, wireless doorbell from scratch, with a button that could run for months on a single battery.
-
-**Action.** We prototyped on the Micro:bit, found it could not supply enough voltage, then moved to Arduino and built LED and speaker test circuits with debounce logic. When volume and installation became the limits, I rebuilt on two ESP32s, writing C++ firmware that uses ESP-NOW for router-free communication and deep sleep with an RTC-pin wake to preserve battery life. Aidan designed the 3D-printed enclosures.
-
-**Result.** A working button and speaker pair tested through three design cycles, with successful tone, continuity, and deep-sleep tests. The final step is linking both boards over ESP-NOW.
+ 
+**Action.** We prototyped on the Micro:bit, found it could not supply enough voltage, then moved to Arduino and built LED and speaker test circuits with debounce logic. When volume and installation became the limits, I rebuilt on two ESP32s with C++ firmware using ESP-NOW for router-free communication and deep sleep with an RTC-pin wake to preserve battery life. Aidan designed the 3D-printed enclosures.
+ 
+**Result.** A complete, installed wireless doorbell. The speaker runs on wall power in the classroom and the battery-powered button is mounted outside, so pressing it now alerts staff inside. Built and tested across three design cycles.
