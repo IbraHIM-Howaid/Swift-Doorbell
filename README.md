@@ -175,7 +175,6 @@ Components: ESP32, BC547 transistor, passive speaker, 1kΩ resistor, 10kΩ resis
 7. BC547 Collector (left leg) → Speaker (−)
 8. Speaker (+) → breadboard + rail (5V)
 
-*BC547 pin order with flat face toward you, legs down: Collector, Base, Emitter (left to right)*
 
 ## Button Side Wiring
 Components: ESP32, 3.36V battery, doorbell button (3-wire), 10kΩ resistor.
