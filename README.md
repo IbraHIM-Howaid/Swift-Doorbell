@@ -243,6 +243,272 @@ void loop() {
 - Deep sleep wake test: successful, Serial Monitor confirmed the message on each button press and the board returns to sleep correctly.
 - Next step: implement ESP-NOW communication to link the button and speaker ESP32 boards.
 
+
+## Final Firmware
+With both boards wired and tested, I wrote the final firmware. The two sketches share an identical `DoorbellMessage` struct so the packet lines up on both sides, and both are organized into classes (`EspNowSender` on the button, `SpeakerController` on the speaker) to keep the logic clean and readable.
+ 
+**Button side** (`doorbell_button.ino`): the board wakes from deep sleep on a button press, fires one ESP-NOW packet to the speaker's MAC address, then goes straight back to sleep. All the work happens once in `setup()`, so `loop()` is never reached.
+ 
+```cpp
+/**
+ * @file doorbell_button.ino
+ * @brief Button-side control software for the Shop Doorbell project (ESP32 + ESP-NOW).
+ * @author Ibrahim Al-Howaid
+ * @date June 2026
+ *
+ * This program runs on the battery-powered button ESP32. The board spends almost
+ * all of its time in Deep Sleep drawing near-zero power. When the physical button
+ * is pressed, GPIO33 is pulled LOW, waking the board. On wake it fires a single
+ * ESP-NOW packet to the speaker ESP32, then immediately returns to Deep Sleep.
+ */
+ 
+#include <esp_now.h>
+#include <WiFi.h>
+#include <esp_sleep.h>
+ 
+// --- WAKE PIN ---
+// GPIO33 is an RTC pin, so it stays active during Deep Sleep and can wake the board.
+#define BUTTON_WAKE_PIN GPIO_NUM_33
+ 
+// --- TARGET ADDRESS ---
+// CHANGE THIS to your speaker ESP32's MAC address.
+uint8_t speakerMAC[] = {0xB4, 0xE6, 0x2D, 0xD5, 0xFB, 0x75};
+ 
+/**
+ * @struct DoorbellMessage
+ * @brief Tiny payload sent over ESP-NOW. Kept identical on both boards.
+ */
+typedef struct {
+  bool ring;
+} DoorbellMessage;
+ 
+/**
+ * @class EspNowSender
+ * @brief Encapsulates ESP-NOW initialization and one-shot transmission.
+ */
+class EspNowSender {
+  private:
+    uint8_t peerMAC[6];
+ 
+  public:
+    // Store the target MAC address for this sender.
+    EspNowSender(uint8_t mac[6]) {
+      memcpy(peerMAC, mac, 6);
+    }
+ 
+    /**
+     * @brief Brings up Wi-Fi in station mode and registers the speaker as a peer.
+     * @return true if ESP-NOW initialized and the peer was added, false otherwise.
+     */
+    bool begin() {
+      WiFi.mode(WIFI_STA);
+ 
+      if (esp_now_init() != ESP_OK) {
+        return false;
+      }
+ 
+      esp_now_peer_info_t peerInfo = {};
+      memcpy(peerInfo.peer_addr, peerMAC, 6);
+      peerInfo.channel = 0;      // 0 = use current channel (no router needed)
+      peerInfo.encrypt = false;
+ 
+      return esp_now_add_peer(&peerInfo) == ESP_OK;
+    }
+ 
+    /**
+     * @brief Sends a single "ring" packet to the speaker ESP32.
+     */
+    void sendRing() {
+      DoorbellMessage msg;
+      msg.ring = true;
+      esp_now_send(peerMAC, (uint8_t *)&msg, sizeof(msg));
+      delay(100); // give the radio time to finish transmitting before sleep
+    }
+};
+ 
+// --- OBJECT INSTANTIATION ---
+EspNowSender doorbellSender(speakerMAC);
+ 
+void setup() {
+  Serial.begin(115200);
+  delay(50);
+ 
+  if (doorbellSender.begin()) {
+    doorbellSender.sendRing();
+    Serial.println("Ring sent!");
+  } else {
+    Serial.println("ESP-NOW init failed");
+  }
+ 
+  // Arm wake-up on button press (GPIO33 going LOW) and return to Deep Sleep.
+  esp_sleep_enable_ext0_wakeup(BUTTON_WAKE_PIN, 0);
+  Serial.println("Going to sleep...");
+  delay(50);
+  esp_deep_sleep_start();
+}
+ 
+void loop() {
+  // Never reached. All work happens once on wake in setup().
+}
+```
+ 
+**Speaker side** (`doorbell_speaker.ino`): the board stays on, listens for the ESP-NOW packet, and on receipt plays one of three randomized melodies through the BC547-driven speaker. The receive callback only raises a flag so it stays fast, and the actual chime plays in `loop()`.
+ 
+```cpp
+/**
+ * @file doorbell_speaker.ino
+ * @brief Speaker-side control software for the Shop Doorbell project (ESP32 + ESP-NOW).
+ * @author Ibrahim Al-Howaid
+ * @date June 2026
+ *
+ * This program runs on the wall-powered speaker ESP32. It stays on continuously,
+ * listening for an ESP-NOW packet from the button ESP32. When a "ring" packet is
+ * received, it plays one of three randomized musical melodies through the speaker
+ * driven by the BC547 transistor on GPIO25.
+ */
+ 
+#include "pitches.h"
+#include <esp_now.h>
+#include <WiFi.h>
+ 
+// --- SPEAKER PIN ---
+#define SPEAKER_PIN 25
+ 
+// --- MELODY ARRAYS ---
+int melody1[] = {NOTE_E6, NOTE_C6};
+int durations1[] = {4, 2};
+int length1 = 2;
+ 
+int melody2[] = {NOTE_C6, NOTE_G5, NOTE_G5, NOTE_A5, NOTE_G5, 0, NOTE_B5, NOTE_C6};
+int durations2[] = {4, 8, 8, 4, 4, 4, 4, 4};
+int length2 = 8;
+ 
+int melody3[] = {NOTE_A5, NOTE_F5, NOTE_G5, NOTE_C5, REST, REST, NOTE_C4, NOTE_G4, NOTE_A4, NOTE_F4};
+int durations3[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
+int length3 = 10;
+ 
+/**
+ * @struct DoorbellMessage
+ * @brief Tiny payload received over ESP-NOW. Kept identical on both boards.
+ */
+typedef struct {
+  bool ring;
+} DoorbellMessage;
+ 
+// Flag set by the receive callback, handled in loop() so the callback stays fast.
+volatile bool ringRequested = false;
+ 
+/**
+ * @class SpeakerController
+ * @brief Manages audio output, frequencies, and melody playback.
+ */
+class SpeakerController {
+  private:
+    int pin;
+ 
+  public:
+    // initialize speaker pin
+    SpeakerController(int p) {
+      pin = p;
+    }
+ 
+    // Initializes the hardware pin and ensures transistor is off
+    void begin() {
+      pinMode(pin, OUTPUT);
+      noTone(pin);
+    }
+ 
+    /**
+     * @brief Iterates through arrays to play a specific musical melody.
+     * @param mel Array of note frequencies.
+     * @param dur Array of note durations.
+     * @param len Number of notes in the melody array.
+     */
+    void playMelody(int mel[], int dur[], int len) {
+      for (int thisNote = 0; thisNote < len; thisNote++) {
+        if (mel[thisNote] == 0 || mel[thisNote] == REST) {
+          noTone(pin); // Ensure transistor is OFF during rests
+        } else {
+          tone(pin, mel[thisNote]);
+        }
+ 
+        // Calculate note duration (1 second / note type)
+        int noteDuration = 1000 / dur[thisNote];
+        delay(noteDuration);
+ 
+        // Stop tone and pause briefly before the next note
+        noTone(pin);
+        int pauseBetweenNotes = noteDuration * 1.01;
+        delay(pauseBetweenNotes);
+      }
+    }
+ 
+    /**
+     * @brief Picks one of the three melodies at random and plays it.
+     */
+    void playRandom() {
+      int choice = random(1, 4); // Pick random number between 1 and 3
+      if (choice == 1) {
+        playMelody(melody1, durations1, length1);
+      } else if (choice == 2) {
+        playMelody(melody2, durations2, length2);
+      } else {
+        playMelody(melody3, durations3, length3);
+      }
+    }
+};
+ 
+// --- OBJECT INSTANTIATION ---
+SpeakerController doorbellSpeaker(SPEAKER_PIN);
+ 
+/**
+ * @brief ESP-NOW receive callback. Kept short: just validates and raises a flag.
+ */
+void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  DoorbellMessage msg;
+  memcpy(&msg, data, sizeof(msg));
+  if (msg.ring) {
+    ringRequested = true;
+  }
+}
+ 
+void setup() {
+  Serial.begin(115200);
+ 
+  doorbellSpeaker.begin();
+  randomSeed(analogRead(0));
+ 
+  WiFi.mode(WIFI_STA);
+ 
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+ 
+  esp_now_register_recv_cb(onReceive);
+  Serial.println("Speaker ready, listening...");
+}
+ 
+void loop() {
+  // Play the chime outside the callback so the radio callback stays fast.
+  if (ringRequested) {
+    ringRequested = false;
+    Serial.println("Ring received!");
+    doorbellSpeaker.playRandom();
+  }
+}
+```
+ 
+*Note: the melody frequencies come from `pitches.h`, the standard Arduino tone-library header that maps note names (like `NOTE_E6`) to their frequencies in Hz.*
+ 
+## Test Results
+- Speaker tone test: successful, three tones played clearly through the BC547 circuit.
+- Button continuity test: successful, GPIO33 reads 1 at idle and switches to 0 when the button is pressed.
+- Deep sleep wake test: successful, Serial Monitor confirmed the message on each button press and the board returns to sleep correctly.
+- ESP-NOW link: successful, the button and speaker ESP32 boards communicate reliably over ESP-NOW.
+
+
+
 ## Final Installation
 The system is built, tested, and installed in the shop. The speaker unit is set up in the classroom on wall power, and the battery-powered button unit is mounted outside by the door. Pressing the button outside plays the chime in the classroom, which solves the original problem of visitors going unnoticed at the auto-locking door.
 
