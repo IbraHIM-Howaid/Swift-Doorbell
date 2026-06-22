@@ -126,7 +126,11 @@ I built this prototype to test the speaker volume and functions while also conne
 https://github.com/user-attachments/assets/358c88d1-b70e-46f1-bb2e-e722ba1a3a29
 
 
-https://github.com/IbraHIM-Howaid/Swift-Doorbell/blob/main/Doorbell-Sketches/Doorbell%20Design%202.jpeg
+
+<img width="4032" height="3024" alt="Doorbell Design 2 (1)" src="https://github.com/user-attachments/assets/f0db4da2-6f94-4f41-865a-d80bd5955752" />
+
+
+
 
 
 
